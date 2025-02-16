@@ -12,10 +12,17 @@ const getAuthUser = async () => {
   return user;
 };
 
+const renderError = (error: unknown): { message: string } => {
+  console.log(error);
+  return {
+    message: error instanceof Error ? error.message : 'An error occurred',
+  };
+};
+
 export const createProfileAction = async (
   prevState: any,
   formData: FormData
-) => {
+): Promise<{ message: string }> => {
   try {
     const user = await currentUser();
     if (!user) throw new Error('Please login to create a profile');
@@ -37,12 +44,13 @@ export const createProfileAction = async (
         hasProfile: true,
       },
     });
-  } catch (error) {
+
     return {
-      message: error instanceof Error ? error.message : 'An error occurred',
+      message: 'Profile created',
     };
+  } catch (error) {
+    return renderError(error);
   }
-  redirect('/');
 };
 
 export const fetchProfileImage = async () => {
@@ -77,7 +85,23 @@ export const updateProfileAction = async (
   prevState: any,
   formData: FormData
 ): Promise<{ message: string }> => {
-  return {
-    message: 'Profile updated',
-  };
+  const user = await getAuthUser();
+
+  const rawData = Object.fromEntries(formData);
+  const validatedFields = profileSchema.parse(rawData);
+
+  try {
+    await db.profile.update({
+      where: {
+        clerkId: user.id,
+      },
+      data: validatedFields,
+    });
+
+    return {
+      message: 'Profile updated',
+    };
+  } catch (error) {
+    return renderError(error);
+  }
 };
