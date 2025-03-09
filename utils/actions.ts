@@ -145,14 +145,58 @@ export const updateProfileImageAction = async (
 export const createPropertyAction = async (
   prevState: any,
   formData: FormData
-): Promise<{ message: string }> => {
+) => {
   const user = await getAuthUser();
   try {
     const rawData = Object.fromEntries(formData);
-    const validatedFields = validateWithZodSchema(propertySchema, rawData);
+    const file = formData.get('image') as File;
 
-    return { message: 'Property created successfully' };
+    const validatedFields = validateWithZodSchema(propertySchema, rawData);
+    const validateImage = validateWithZodSchema(imageSchema, { image: file });
+
+    const fullPath = await uploadImage(validateImage.image);
+
+    await db.property.create({
+      data: {
+        ...validatedFields,
+        profileId: user.id,
+        image: fullPath,
+      },
+    });
   } catch (error) {
     return renderError(error);
   }
+
+  redirect('/');
+};
+
+export const fetchProperties = async ({
+  search = '',
+  category,
+}: {
+  search?: string;
+  category?: string;
+}) => {
+  const properties = await db.property.findMany({
+    select: {
+      id: true,
+      name: true,
+      tagline: true,
+      price: true,
+      country: true,
+      image: true,
+    },
+    where: {
+      category,
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { tagline: { contains: search, mode: 'insensitive' } },
+      ],
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  return properties;
 };

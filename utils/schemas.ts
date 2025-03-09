@@ -85,5 +85,5 @@ export const propertySchema = z.object({
   baths: z.coerce.number().int().min(0, {
     message: 'bahts amount must be a positive number.',
   }),
-  amenities: z.string(),
+  amenities: z.string(), // only to check if there's something in this
 });
