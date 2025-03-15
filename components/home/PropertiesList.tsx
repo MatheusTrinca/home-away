@@ -1,7 +1,14 @@
 import type { PropertyCardProps } from '@/utils/types';
+import PropertyCard from '../card/PropertyCard';
 
 function PropertiesList({ properties }: { properties: PropertyCardProps[] }) {
-  return <div>PropertiesList</div>;
+  return (
+    <section>
+      {properties.map(property => (
+        <PropertyCard key={property.id} property={property} />
+      ))}
+    </section>
+  );
 }
 
 export default PropertiesList;
