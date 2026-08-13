@@ -2,6 +2,7 @@
 
 import db from './db';
 import { clerkClient, currentUser } from '@clerk/nextjs/server';
+import type { User } from '@clerk/nextjs/server';
 import {
   imageSchema,
   profileSchema,
@@ -12,10 +13,35 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { uploadImage } from './supabase';
 
+const ensureProfile = async (user: User) => {
+  // fast-path: já tem profile, não toca no banco
+  if (user.privateMetadata.hasProfile) return;
+
+  const email = user.emailAddresses[0]?.emailAddress ?? '';
+  const usernameFallback = email.split('@')[0] || user.id.slice(0, 8);
+
+  await db.profile.upsert({
+    where: { clerkId: user.id },
+    update: {}, // já existe -> não sobrescreve nada
+    create: {
+      clerkId: user.id,
+      firstName: user.firstName ?? 'User',
+      lastName: user.lastName ?? '',
+      username: user.username ?? usernameFallback,
+      email,
+      profileImage: user.imageUrl ?? '', // URL do Clerk/Google
+    },
+  });
+
+  await clerkClient.users.updateUser(user.id, {
+    privateMetadata: { hasProfile: true },
+  });
+};
+
 const getAuthUser = async () => {
   const user = await currentUser();
   if (!user) throw new Error('You must be logged in to access this page');
-  if (!user.privateMetadata.hasProfile) redirect('/profile/create');
+  if (!user.privateMetadata.hasProfile) await ensureProfile(user);
   return user;
 };
 
@@ -63,6 +89,8 @@ export const createProfileAction = async (
 export const fetchProfileImage = async () => {
   const user = await currentUser();
   if (!user) return null;
+
+  await ensureProfile(user); // cria no 1º acesso
 
   const profile = await db.profile.findUnique({
     where: {
