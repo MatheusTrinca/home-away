@@ -28,6 +28,7 @@ model Property {
   profileId   String
   favorites   Favorite[]
   reviews     Review[]
+  bookings    Booking[]
 }
 
 model Profile {
@@ -43,28 +44,44 @@ model Profile {
   properties   Property[]
   favorites    Favorite[]
   reviews      Review[]
+  bookings     Booking[]
 }
 
 model Favorite {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  profile   Profile @relation(fields: [profileId], references: [clerkId], onDelete: Cascade)
-  profileId String
+  profile    Profile @relation(fields: [profileId], references: [clerkId], onDelete: Cascade)
+  profileId  String
 
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  profile   Profile  @relation(fields: [profileId], references: [clerkId], onDelete: Cascade)
-  profileId String
+  id         String   @id @default(uuid())
+  profile    Profile  @relation(fields: [profileId], references: [clerkId], onDelete: Cascade)
+  profileId  String
   property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
-  rating    Int
-  comment   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Booking {
+  id            String   @id @default(uuid())
+  profile       Profile  @relation(fields: [profileId], references: [clerkId], onDelete: Cascade)
+  profileId     String
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId    String
+  orderTotal    Int
+  totalNights   Int
+  checkIn       DateTime
+  checkOut      DateTime
+  paymentStatus Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
