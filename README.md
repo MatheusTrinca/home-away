@@ -1,315 +1,132 @@
-### Stripe
+# HomeAway
 
-[Embedded Form](https://docs.stripe.com/checkout/embedded/quickstart)
+> Feel at home, away from home.
 
-- setup and add keys to .env
-- install
+HomeAway is an Airbnb-style rental marketplace where users can list properties, favorite
+and review them, book stays, and pay by card. Built with Next.js 14 (App Router), Prisma,
+Clerk, Stripe, and Supabase.
 
-```sh
-npm install --save @stripe/react-stripe-js @stripe/stripe-js stripe axios
+## Features
+
+- 🔐 **User authentication** with Clerk (sign in, sign up, and profiles)
+- 🏠 **Property listings** with image upload, categories, amenities, and country location
+- ❤️ **Favorites** to save properties you like
+- ⭐ **Reviews and ratings** left by guests
+- 🗓️ **Bookings** with a date-range picker and automatic nights/total calculation
+- 💳 **Payments** via Stripe Checkout (embedded mode)
+- 🗺️ **Interactive map** of the property location with Leaflet
+- 📊 **Admin dashboard** with stats and charts (Recharts)
+- 🌗 **Light/dark theme** with next-themes
+
+## Tech Stack
+
+| Layer          | Technology                                        |
+| -------------- | ------------------------------------------------- |
+| Framework      | [Next.js 14](https://nextjs.org/) (App Router)    |
+| Language       | TypeScript                                        |
+| Styling        | Tailwind CSS + shadcn/ui (Radix UI)               |
+| Database       | PostgreSQL (Supabase) via [Prisma](https://www.prisma.io/) |
+| Authentication | [Clerk](https://clerk.com/)                       |
+| Payments       | [Stripe](https://stripe.com/)                     |
+| Storage        | Supabase Storage (images)                         |
+| Validation     | Zod                                               |
+| State          | Zustand                                           |
+| Maps           | Leaflet / react-leaflet                           |
+| Charts         | Recharts                                          |
+
+## Prerequisites
+
+- Node.js 18+
+- A [Supabase](https://supabase.com/) account (Postgres database + storage)
+- A [Clerk](https://clerk.com/) account
+- A [Stripe](https://stripe.com/) account
+
+## Getting Started
+
+1. **Clone the repository and install dependencies:**
+
+   ```bash
+   git clone <repository-url>
+   cd home-away
+   npm install
+   ```
+
+2. **Configure environment variables.**
+
+   Copy the example file and fill it in with your credentials:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   | Variable | Description |
+   | --- | --- |
+   | `DATABASE_URL` | Postgres connection string (with pgbouncer) |
+   | `DIRECT_URL` | Direct connection string (used for migrations) |
+   | `SUPABASE_URL` / `SUPABASE_KEY` | Supabase project URL and service key (storage) |
+   | `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk keys |
+   | `ADMIN_USER_ID` | Clerk user ID with access to the admin dashboard |
+   | `NEXT_PUBLIC_WEBSITE_URL` | Base URL of the app |
+   | `STRIPE_SECRET_KEY` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe keys |
+
+3. **Set up the database:**
+
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   npm run seed        # (optional) populate the database with sample data
+   ```
+
+4. **Run the development server:**
+
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000).
+
+## Scripts
+
+| Command         | Description                                     |
+| --------------- | ----------------------------------------------- |
+| `npm run dev`   | Start the development server                    |
+| `npm run build` | Generate the Prisma Client and build for prod   |
+| `npm run start` | Start the production server                     |
+| `npm run lint`  | Run ESLint                                       |
+| `npm run seed`  | Populate the database with sample data          |
+
+## Project Structure
+
+```
+app/
+  api/            # API routes (Stripe: payment / confirm)
+  admin/          # Admin dashboard
+  properties/     # Property listing and detail pages
+  rentals/        # Management of the user's own listings
+  bookings/       # The user's bookings
+  reservations/   # Reservations received on the host's listings
+  reviews/        # The user's reviews
+  favorites/      # Favorited properties
+  profile/        # User profile
+components/        # UI components (Radix / shadcn)
+prisma/           # Database schema and seed
+utils/            # Server actions, Zod schemas, helpers, and stores
 ```
 
-### Refactor createBookingAction
+## Data Models
 
-```ts
-export const createBookingAction = async (prevState: {
-  propertyId: string;
-  checkIn: Date;
-  checkOut: Date;
-}) => {
-  // create variable
-  let bookingId: null | string = null;
+The Prisma schema defines five core models: `Profile`, `Property`, `Favorite`,
+`Review`, and `Booking`. See [prisma/schema.prisma](prisma/schema.prisma) for details.
 
-  try {
-    const booking = await db.booking.create(....);
-    // change value
-    bookingId = booking.id;
-  } catch (error) {
-    return renderError(error);
-  }
-  // redirect to checkout
-  redirect(`/checkout?bookingId=${bookingId}`);
-};
-```
+## Payments
 
-### Checkout Page
+The payment flow uses Stripe Checkout in *embedded* mode:
 
-```tsx
-'use client';
-import axios from 'axios';
-import { useSearchParams } from 'next/navigation';
-import React, { useCallback } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  EmbeddedCheckoutProvider,
-  EmbeddedCheckout,
-} from '@stripe/react-stripe-js';
+1. The user creates a `Booking` with dates and a calculated total.
+2. `POST /api/payment` creates a Stripe checkout session.
+3. After payment, Stripe redirects to `GET /api/confirm`, which marks the
+   booking as paid (`paymentStatus = true`).
 
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string
-);
+---
 
-export default function CheckoutPage() {
-  const searchParams = useSearchParams();
-
-  const bookingId = searchParams.get('bookingId');
-
-  const fetchClientSecret = useCallback(async () => {
-    // Create a Checkout Session
-    const response = await axios.post('/api/payment', {
-      bookingId: bookingId,
-    });
-    return response.data.clientSecret;
-  }, []);
-
-  const options = { fetchClientSecret };
-
-  return (
-    <div id="checkout">
-      <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
-        <EmbeddedCheckout />
-      </EmbeddedCheckoutProvider>
-    </div>
-  );
-}
-```
-
-### API - Payment Route
-
-api/payment/route.ts
-
-```ts
-import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-import { type NextRequest, type NextResponse } from 'next/server';
-import db from '@/utils/db';
-import { formatDate } from '@/utils/format';
-export const POST = async (req: NextRequest, res: NextResponse) => {
-  const requestHeaders = new Headers(req.headers);
-  const origin = requestHeaders.get('origin');
-
-  const { bookingId } = await req.json();
-
-  const booking = await db.booking.findUnique({
-    where: { id: bookingId },
-    include: {
-      property: {
-        select: {
-          name: true,
-          image: true,
-        },
-      },
-    },
-  });
-
-  if (!booking) {
-    return Response.json(null, {
-      status: 404,
-      statusText: 'Not Found',
-    });
-  }
-  const {
-    totalNights,
-    orderTotal,
-    checkIn,
-    checkOut,
-    property: { image, name },
-  } = booking;
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      ui_mode: 'embedded',
-      metadata: { bookingId: booking.id },
-      line_items: [
-        {
-          // Provide the exact Price ID (for example, pr_1234) of
-          // the product you want to sell
-          quantity: 1,
-          price_data: {
-            currency: 'usd',
-
-            product_data: {
-              name: `${name}`,
-              images: [image],
-              description: `Stay in this wonderful place for ${totalNights} nights, from ${formatDate(
-                checkIn
-              )} to ${formatDate(checkOut)}. Enjoy your stay!`,
-            },
-            unit_amount: orderTotal * 100,
-          },
-        },
-      ],
-      mode: 'payment',
-      return_url: `${origin}/api/confirm?session_id={CHECKOUT_SESSION_ID}`,
-    });
-
-    return Response.json({ clientSecret: session.client_secret });
-  } catch (error) {
-    console.log(error);
-
-    return Response.json(null, {
-      status: 500,
-      statusText: 'Internal Server Error',
-    });
-  }
-};
-```
-
-### API - Confirm Route
-
-api/confirm/route.ts
-
-```ts
-import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-import { redirect } from 'next/navigation';
-
-import { type NextRequest, type NextResponse } from 'next/server';
-import db from '@/utils/db';
-
-export const GET = async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  const session_id = searchParams.get('session_id') as string;
-
-  try {
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-    // console.log(session);
-
-    const bookingId = session.metadata?.bookingId;
-    if (session.status === 'complete' && bookingId) {
-      await db.booking.update({
-        where: { id: bookingId },
-        data: { paymentStatus: true },
-      });
-    }
-  } catch (err) {
-    console.log(err);
-    return Response.json(null, {
-      status: 500,
-      statusText: 'Internal Server Error',
-    });
-  }
-  redirect('/bookings');
-};
-```
-
-### Refactor Actions
-
-- remove all bookings with 'paymentStatus' false, before creating a booking
-  createBookingAction.ts
-
-```ts
-export const createBookingAction = async (prevState: {
-  propertyId: string;
-  checkIn: Date;
-  checkOut: Date;
-}) => {
-  let bookingId: null | string = null;
-
-  const user = await getAuthUser();
-
-  await db.booking.deleteMany({
-    where: {
-      profileId: user.id,
-      paymentStatus: false,
-    },
-  });
-.....
-}
-```
-
-- Check for 'paymentStatus' when fetching bookings
-
-  - fetchBookings
-  - rentalsWithBookingSums
-  - fetchReservations
-  - fetchStats
-
-  ```ts
-  const bookingsCount = await db.booking.count({
-    where: {
-      paymentStatus: true,
-    },
-  });
-  ```
-
-  - fetchChartsData
-
-### Reservation Stats
-
-- actions.ts
-
-```ts
-export const fetchReservationStats = async () => {
-  const user = await getAuthUser();
-  const properties = await db.property.count({
-    where: {
-      profileId: user.id,
-    },
-  });
-
-  const totals = await db.booking.aggregate({
-    _sum: {
-      orderTotal: true,
-      totalNights: true,
-    },
-    where: {
-      property: {
-        profileId: user.id,
-      },
-    },
-  });
-
-  return {
-    properties,
-    nights: totals._sum.totalNights || 0,
-    amount: totals._sum.orderTotal || 0,
-  };
-};
-```
-
-- create components/reservations/Stats.tsx
-
-```tsx
-import StatsCards from '@/components/admin/StatsCard';
-import { fetchReservationStats } from '@/utils/actions';
-import { formatCurrency } from '@/utils/format';
-async function Stats() {
-  const stats = await fetchReservationStats();
-
-  return (
-    <div className="mt-8 grid md:grid-cols-2 gap-4 lg:grid-cols-3">
-      <StatsCards title="properties" value={stats.properties} />
-      <StatsCards title="nights" value={stats.nights} />
-      <StatsCards title="total" value={formatCurrency(stats.amount)} />
-    </div>
-  );
-}
-export default Stats;
-```
-
-- refactor StatsCard.tsx
-
-```tsx
-import { Card, CardHeader } from '@/components/ui/card';
-
-type StatsCardsProps = {
-  title: string;
-  value: number | string;
-};
-```
-
-- render in reservations
-
-```tsx
-import Stats from '@/components/reservations/Stats';
-
-return (
-  <>
-    <Stats />
-    ....
-  </>
-);
-```
-
-### 🚀🚀🚀 THE END 🚀🚀🚀
+Learning project based on a Next.js course.
